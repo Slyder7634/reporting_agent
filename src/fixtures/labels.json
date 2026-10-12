@@ -1,0 +1,32 @@
+{
+  "S1": {
+    "scenario": "User is logged out and cart is gone",
+    "classification": "USER_ACTION",
+    "rootCause": "Session expired after 30 minutes. Guide the user to sign in again.",
+    "expectedMessage": "Your session expired. Please sign in again to restore your cart."
+  },
+  "S2": {
+    "scenario": "Payment fails with invalid key",
+    "classification": "CONFIG",
+    "rootCause": "The PAYMENT_KEY environment variable is missing or incorrect.",
+    "expectedMessage": "The payment service is not configured correctly. Please retry after checking the payment settings."
+  },
+  "S3": {
+    "scenario": "The page spins forever and does not load",
+    "classification": "NETWORK",
+    "rootCause": "Upstream API timeout has been toggled on.",
+    "expectedMessage": "The service may be temporarily unavailable. Please retry in a moment and check your connection."
+  },
+  "S4": {
+    "scenario": "Total is off by one cent on large orders",
+    "classification": "SOFTWARE_DEFECT",
+    "rootCause": "Rounding is applied to each line item instead of once to the final order total.",
+    "expectedMessage": "An issue with the order total calculation has been detected."
+  },
+  "S5": {
+    "scenario": "Search returns duplicate items on page 2",
+    "classification": "SOFTWARE_DEFECT",
+    "rootCause": "Pagination offset is off by one, causing overlapping results.",
+    "expectedMessage": "A search pagination bug has been detected."
+  }
+}

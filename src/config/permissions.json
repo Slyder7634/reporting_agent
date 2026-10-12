@@ -1,0 +1,14 @@
+{
+  "defaultDeny": true,
+  "tools": {
+    "readLogs": true,
+    "readState": true,
+    "runHealthCheck": true,
+    "readUserPII": false,
+    "writeAppData": false,
+    "executeShell": false,
+    "modifySource": false,
+    "runTests": true
+  },
+  "redact": ["token", "password", "email", "apiKey", "secret"]
+}
