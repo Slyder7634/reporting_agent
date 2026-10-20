@@ -126,13 +126,12 @@ The MVP is accepted when all of the following are demonstrated end to end:
 - [L] Production deployment or monitoring integration.
 - [L] Multi-app support beyond the sample app.
 - [L] Real user PII handling and compliance (GDPR, etc.).
-- [L] Web-based developer dashboard.
 - [L] Learning from past incidents to improve classification.
 - [L] Mobile SDK.
 
 ## 6. Assumptions and Constraints
 
-- The LLM is accessed via the Anthropic API. Requests send only redacted data.
+- The LLM uses NVIDIA Nemotron through its OpenAI-compatible API. Requests send only redacted data, and API credentials remain server-side.
 - The team has about one to two weeks of part-time time. Hackathon constraints may tighten this.
 - The MVP uses a single sample app. It is a deliberately small system, so the investigation path can be fully tested.
 - The developer writes the app documentation given to the agent. Documentation quality directly affects accuracy.

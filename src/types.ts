@@ -10,6 +10,7 @@ export interface EvidenceItem {
 
 export interface InvestigationResult {
   investigationId: string;
+  provider: 'local' | 'nvidia-nemotron';
   classification: Classification;
   confidence: number;
   evidence: EvidenceItem[];

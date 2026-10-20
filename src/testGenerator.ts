@@ -69,14 +69,29 @@ export function generateTestProposals(incident: IncidentDraft): ProposalRecord[]
     });
   }
 
+  const existing = listProposals();
+  const merged = new Map(existing.map((proposal) => [proposal.id, proposal]));
+  for (const proposal of proposals) {
+    const previous = merged.get(proposal.id);
+    merged.set(proposal.id, previous
+      ? {
+          ...proposal,
+          state: previous.state,
+          approvedBy: previous.approvedBy,
+          approvedAt: previous.approvedAt
+        }
+      : proposal);
+  }
+
   const storePath = path.join(currentDir, 'proposals', 'proposals.json');
-  fs.writeFileSync(storePath, JSON.stringify(proposals, null, 2));
+  const allProposals = [...merged.values()];
+  fs.writeFileSync(storePath, JSON.stringify(allProposals, null, 2));
 
   for (const proposal of proposals) {
     fs.writeFileSync(proposal.file, proposal.content);
   }
 
-  return proposals;
+  return proposals.map((proposal) => merged.get(proposal.id) ?? proposal);
 }
 
 export function listProposals(): ProposalRecord[] {

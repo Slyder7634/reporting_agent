@@ -1,7 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { runInvestigation } from '../src/investigation.js';
 import { calculateOrderTotal, paginateResults } from '../src/sampleApp.js';
+
+const originalNvidiaApiKey = process.env.NVIDIA_API_KEY;
+
+beforeAll(() => {
+  delete process.env.NVIDIA_API_KEY;
+});
+
+afterAll(() => {
+  if (originalNvidiaApiKey === undefined) {
+    delete process.env.NVIDIA_API_KEY;
+  } else {
+    process.env.NVIDIA_API_KEY = originalNvidiaApiKey;
+  }
+});
 
 describe('core investigation behavior', () => {
   it('classifies S1 as USER_ACTION', async () => {

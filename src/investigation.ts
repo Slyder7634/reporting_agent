@@ -2,9 +2,25 @@ import { callTool, buildToolSchema } from './toolGateway.js';
 import { getSeedLabels } from './sampleApp.js';
 import { generateTestProposals } from './testGenerator.js';
 import { writeIncidentReport } from './reportWriter.js';
+import { getProviderStatus, investigateWithNemotron } from './nvidiaProvider.js';
 import type { Classification, EvidenceItem, IncidentDraft, InvestigationResult, ReportInput } from './types.js';
 
 const TOOL_SCHEMA = buildToolSchema();
+
+function safeResolutionMessage(classification: Classification): string {
+  switch (classification) {
+    case 'USER_ACTION':
+      return 'Please sign in again and retry. If the issue continues, contact support.';
+    case 'CONFIG':
+      return 'The service settings need review. Please contact your administrator, then retry once they are confirmed.';
+    case 'NETWORK':
+      return 'Check your connection and retry in a moment. This may be temporary.';
+    case 'SOFTWARE_DEFECT':
+      return 'A software defect may be affecting this behavior. The incident details and proposed regression tests are ready for developer review.';
+    case 'UNKNOWN':
+      return 'There is not enough evidence to confirm the cause. Escalate this report for human review.';
+  }
+}
 
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
@@ -77,7 +93,11 @@ export function classifyReport(report: ReportInput): { classification: Classific
 
 export async function runInvestigation(report: ReportInput): Promise<InvestigationResult> {
   const investigationId = buildId();
-  const toolResults = [
+  const useNemotron = getProviderStatus().configured;
+  const modelAssessment = useNemotron
+    ? await investigateWithNemotron(report, investigationId, callTool)
+    : undefined;
+  const toolResults = modelAssessment?.toolResults ?? [
     callTool('readLogs', { report: report.text }, investigationId),
     callTool('readState', { userId: report.userId ?? 'demo-user', page: report.currentPage ?? '/checkout' }, investigationId),
     callTool('runHealthCheck', { verbose: true }, investigationId)
@@ -91,9 +111,19 @@ export async function runInvestigation(report: ReportInput): Promise<Investigati
       summary: JSON.stringify(toolResult.data ?? {})
     }));
 
-  const classification = classifyReport(report);
+  const classification = modelAssessment
+    ? {
+        classification: modelAssessment.classification,
+        confidence: modelAssessment.confidence,
+        evidence,
+        escalated: modelAssessment.classification === 'UNKNOWN',
+        message: safeResolutionMessage(modelAssessment.classification),
+        transient: modelAssessment.classification === 'NETWORK' || modelAssessment.transient
+      }
+    : classifyReport(report);
   const baseResult: InvestigationResult = {
     investigationId,
+    provider: useNemotron ? 'nvidia-nemotron' : 'local',
     classification: classification.classification,
     confidence: classification.confidence,
     evidence: [...classification.evidence, ...evidence],
@@ -104,8 +134,9 @@ export async function runInvestigation(report: ReportInput): Promise<Investigati
   };
 
   if (classification.classification === 'SOFTWARE_DEFECT') {
+    const reportText = report.text.toLowerCase();
     const scenarioId = (
-      /rounding|one cent|total/.test(report.text) ? 'S4' : /duplicate|page 2|search/.test(report.text) ? 'S5' : 'S4'
+      /rounding|one cent|total/.test(reportText) ? 'S4' : /duplicate|page 2|search/.test(reportText) ? 'S5' : 'S4'
     );
     const incident: IncidentDraft = {
       investigationId,

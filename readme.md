@@ -1,55 +1,87 @@
 # Reporting Agent
 
-A minimal Node.js + TypeScript MVP for a diagnostic workflow that:
-
-- accepts a user report,
-- classifies it into `USER_ACTION`, `CONFIG`, `NETWORK`, `SOFTWARE_DEFECT`, or `UNKNOWN`,
-- gathers allowlisted evidence through read-only tools,
-- produces an incident report and regression-test proposals for defects,
-- verifies approved tests against a `buggy` or `fixed` build.
+Signal Desk is a local web dashboard and CLI for turning an issue report into a diagnosis, incident report, reviewed regression-test proposals, and a fail-then-pass verification run.
 
 ## Quick start
 
-1. Install dependencies:
-   npm install
-2. Run the built-in suite:
-   npm test
-3. Run the CLI on a report:
-   npx tsx src/cli.ts investigate --text "Payments fail with invalid key"
-4. Review generated proposals:
-   npx tsx src/cli.ts review-tests
-5. Approve a proposal:
-   npx tsx src/cli.ts review-tests --approve S4-ROUNDING
-6. Verify against the buggy or fixed build:
-   npx tsx src/cli.ts verify --build buggy
-   npx tsx src/cli.ts verify --build fixed
+```sh
+npm install
+cp .env.example .env
+```
 
-## Included behavior
+Add your NVIDIA API key to `.env` as `NVIDIA_API_KEY`, then start the app:
 
-- S1 -> `USER_ACTION`
-- S2 -> `CONFIG`
-- S3 -> `NETWORK`
-- S4 -> `SOFTWARE_DEFECT` with incident report and rounding regression test
-- S5 -> `SOFTWARE_DEFECT` with pagination regression test
-- ambiguous text -> `UNKNOWN` with escalation
+```sh
+npm start
+```
 
-## Sample app notes
+Open <http://127.0.0.1:3000>. Without an API key, the dashboard uses the built-in local classifier so the sample workflow still runs.
 
-The project includes a small Express app and seeded diagnostics under `/diag/*`, protected by a bearer token. The app intentionally models two defect scenarios:
+## NVIDIA Nemotron integration
 
-- `S4`: total rounding is wrong on the buggy build.
-- `S5`: search pagination duplicates items on page 2 on the buggy build.
+The server uses the OpenAI JavaScript SDK against NVIDIA's OpenAI-compatible API. The key stays on the server and is never sent to the browser.
 
-The fixed build corrects both defects, and the generated Vitest tests are designed to fail on the buggy build and pass on the fixed build.
+```dotenv
+NVIDIA_API_KEY=your-NVIDIA-API-key
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=nvidia/nemotron-3-nano-30b-a3b
+```
 
-## File layout
+Use a model available to your NVIDIA API account by changing `NVIDIA_MODEL`. The base URL can also be overridden if NVIDIA changes the hosted endpoint or you use a compatible NIM deployment. Reports are scrubbed for common secrets, bearer tokens, email addresses, and phone numbers before being sent to the model. Keep real customer data out of this demo.
 
-- `src/investigation.ts` — report classification and investigation loop
-- `src/toolGateway.ts` — allowlist, redaction, and audit-ready tool wrapper
-- `src/reportWriter.ts` — Markdown incident output
-- `src/testGenerator.ts` — generates pending regression proposals
-- `src/verification.ts` — runs approved tests against a build
-- `src/server.ts` — Express smoke-test server and diagnostic endpoints
+## Web workflow
+
+1. Enter an issue or choose one of the example reports.
+2. Review classification, confidence, user guidance, diagnostic evidence, and (for defects) the incident report.
+3. Approve or reject generated test proposals.
+4. Run the approved tests on the `buggy` build to see the regression, then the `fixed` build.
+5. Review the recent allowlisted diagnostic calls in the audit panel.
+
+The server binds to `127.0.0.1` by default. Set `HOST` to change that. The demo diagnostic routes use `DIAG_TOKEN` (default `demo-token`) and require a bearer token.
+
+## CLI
+
+```sh
+npx tsx src/cli.ts investigate --text "Payments fail with invalid key"
+npx tsx src/cli.ts review-tests
+npx tsx src/cli.ts review-tests --approve S4-ROUNDING
+npx tsx src/cli.ts verify --build buggy
+npx tsx src/cli.ts verify --build fixed
+```
+
+## HTTP API
+
+- `GET /api/status` — provider and model configuration status (never returns the API key).
+- `POST /api/report` — investigate `{ "text": "...", "currentPage": "/checkout" }`.
+- `GET /api/proposals` — list proposals.
+- `POST /api/proposals/:id/review` — approve or reject a proposal.
+- `POST /api/verify` — verify with `{ "build": "buggy" }` or `{ "build": "fixed" }`.
+- `GET /api/audit` — latest allowlisted tool calls with sensitive values redacted.
+
+## Local demo scenarios
+
+- S1: expired session → `USER_ACTION`
+- S2: missing payment configuration → `CONFIG`
+- S3: upstream timeout → `NETWORK`
+- S4: per-item total rounding → `SOFTWARE_DEFECT`
+- S5: pagination offset → `SOFTWARE_DEFECT`
+- Ambiguous report → `UNKNOWN` and escalation
+
+The sample app intentionally has `buggy` and `fixed` implementations for S4 and S5. The generated Vitest proposals must be approved before verification. Run the suite and build with:
+
+```sh
+npm test
+npm run build
+```
+
+## Project layout
+
+- `src/investigation.ts` — local and model-backed investigation workflows
+- `src/nvidiaProvider.ts` — Nemotron SDK client and bounded read-only tool-calling loop
+- `src/toolGateway.ts` — default-deny tool allowlist, redaction, and audit log
+- `src/reportWriter.ts` — Markdown incident report output
+- `src/testGenerator.ts` — pending regression-test proposals and review state
+- `src/verification.ts` — approved-test execution against a named sample build
+- `src/server.ts` — HTTP API and local dashboard server
+- `public/index.html` — responsive dashboard
 - `src/sampleApp.ts` — seeded scenarios and buggy/fixed behavior helpers
-- `src/config/permissions.json` — default-deny permissions
-- `src/fixtures/labels.json` — scenario metadata

@@ -10,6 +10,13 @@ export interface ToolCallLog {
   arguments: Record<string, unknown>;
   resultSize: number;
   investigationId: string;
+  allowed: boolean;
+}
+
+export interface ToolCallResult<T = unknown> {
+  ok: boolean;
+  data?: T;
+  log: ToolCallLog;
 }
 
 const defaultPermissions = JSON.parse(
@@ -19,9 +26,21 @@ const defaultPermissions = JSON.parse(
   redact: string[];
 };
 
+const auditLog: ToolCallLog[] = [];
+const supportedTools = new Set(['readLogs', 'readState', 'runHealthCheck']);
+
+export function redactText(value: string): string {
+  return value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|nvapi-[A-Za-z0-9_-]{12,})\b/gi, '[REDACTED_SECRET]')
+    .replace(/\b(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]')
+    .replace(/(?<!\w)(?:\+?\d[\d\s().-]{8,}\d)(?!\w)/g, '[REDACTED_PHONE]');
+}
+
 function redactValue(value: unknown, keys: string[]): unknown {
   if (typeof value === 'string') {
-    return value;
+    return redactText(value);
   }
 
   if (Array.isArray(value)) {
@@ -47,20 +66,35 @@ export function redactSensitiveData<T>(value: T, keys = defaultPermissions.redac
 }
 
 export function isToolAllowed(toolName: string, permissions = defaultPermissions.tools): boolean {
-  return Boolean(permissions[toolName]);
+  return Boolean(permissions[toolName]) && supportedTools.has(toolName);
 }
 
-export function callTool<T>(toolName: string, args: Record<string, unknown>, investigationId: string): { ok: boolean; data?: T; log: ToolCallLog } {
+function recordAudit(log: ToolCallLog): void {
+  auditLog.push(log);
+  if (auditLog.length > 1000) {
+    auditLog.shift();
+  }
+}
+
+export function listAuditLog(): ToolCallLog[] {
+  return auditLog.map((entry) => ({ ...entry, arguments: { ...entry.arguments } }));
+}
+
+export function callTool<T>(toolName: string, args: Record<string, unknown>, investigationId: string): ToolCallResult<T> {
+  const safeArgs = redactSensitiveData(args) as Record<string, unknown>;
   if (!isToolAllowed(toolName)) {
+    const log: ToolCallLog = {
+      timestamp: new Date().toISOString(),
+      tool: toolName,
+      arguments: safeArgs,
+      resultSize: 0,
+      investigationId,
+      allowed: false
+    };
+    recordAudit(log);
     return {
       ok: false,
-      log: {
-        timestamp: new Date().toISOString(),
-        tool: toolName,
-        arguments: args,
-        resultSize: 0,
-        investigationId
-      }
+      log
     };
   }
 
@@ -87,30 +121,75 @@ export function callTool<T>(toolName: string, args: Record<string, unknown>, inv
           status: 'degraded'
         } as T;
       default:
-        return { error: 'Unsupported tool' } as T;
+        return undefined;
     }
   })();
+
+  if (data === undefined) {
+    const log: ToolCallLog = {
+      timestamp: new Date().toISOString(),
+      tool: toolName,
+      arguments: safeArgs,
+      resultSize: 0,
+      investigationId,
+      allowed: false
+    };
+    recordAudit(log);
+    return { ok: false, log };
+  }
 
   const safeData = redactSensitiveData(data);
   const resultSize = JSON.stringify(safeData).length;
 
+  const log: ToolCallLog = {
+    timestamp: new Date().toISOString(),
+    tool: toolName,
+    arguments: safeArgs,
+    resultSize,
+    investigationId,
+    allowed: true
+  };
+  recordAudit(log);
+
   return {
     ok: true,
     data: safeData,
-    log: {
-      timestamp: new Date().toISOString(),
-      tool: toolName,
-      arguments: args,
-      resultSize,
-      investigationId
-    }
+    log
   };
 }
 
 export function buildToolSchema() {
   return [
-    { name: 'readLogs', description: 'Read redacted application logs for the current report.' },
-    { name: 'readState', description: 'Read non-secret app state for the current session or request.' },
-    { name: 'runHealthCheck', description: 'Run a read-only health check against the app status.' }
+    {
+      name: 'readLogs',
+      description: 'Read redacted application logs relevant to a report.',
+      parameters: {
+        type: 'object',
+        properties: { report: { type: 'string', description: 'A short, redacted issue summary.' } },
+        required: ['report'],
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'readState',
+      description: 'Read non-secret application state for a page or session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          page: { type: 'string' },
+          userId: { type: 'string', description: 'Opaque identifier only; omit unless needed.' }
+        },
+        additionalProperties: false
+      }
+    },
+    {
+      name: 'runHealthCheck',
+      description: 'Run a read-only application health check.',
+      parameters: {
+        type: 'object',
+        properties: { verbose: { type: 'boolean' } },
+        additionalProperties: false
+      }
+    }
   ];
 }

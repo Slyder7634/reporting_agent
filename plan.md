@@ -15,9 +15,9 @@ These must be settled before Phase 1. Recommended defaults are marked.
 |---|---|---|---|
 | D1 | Language | Node.js/TypeScript, Python | Node.js/TypeScript. Keeps the sample app, agent, and Vitest in one stack. |
 | D2 | Sample app | Own build, existing open-source app | Own build. Seeded bugs need known root causes. |
-| D3 | LLM | Claude via Anthropic API, other | Claude via Anthropic API. |
+| D3 | LLM | Hosted API or local model | NVIDIA Nemotron through the OpenAI-compatible API and JavaScript SDK, configured by environment variables. |
 | D4 | Test framework | Vitest, Jest | Vitest. Fast, minimal config. |
-| D5 | Interface | CLI, web page | CLI for MVP. A simple page is a stretch goal. |
+| D5 | Interface | CLI, web page | CLI and a local web dashboard. |
 | D6 | Code patches | In scope, out of scope | Out of scope for MVP. |
 | D7 | Hackathon deadline | Date | Needed to set the phase timing below. |
 
@@ -31,7 +31,7 @@ Goals: confirm the approach and gather prior art.
 
 - Survey existing tools: AI-assisted bug triage (e.g., Sentry AI features, Jira automation), test generation tools (e.g., Diffblue, Qodo, GitHub Copilot test generation), and agent frameworks with tool allowlists.
 - Note what each does and does not do. The gap to target: end-to-end chain from user report to verified regression test, with human approval.
-- Confirm the Anthropic API tool-use flow works with a trivial tool.
+- Confirm the NVIDIA Nemotron OpenAI-compatible tool-use flow works with a trivial read-only tool.
 
 Deliverable: a one-page prior-art note and a go/no-go decision.
 

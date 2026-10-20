@@ -10,5 +10,5 @@
     "modifySource": false,
     "runTests": true
   },
-  "redact": ["token", "password", "email", "apiKey", "secret"]
+  "redact": ["token", "password", "email", "apiKey", "secret", "userId", "name", "address", "phone"]
 }
